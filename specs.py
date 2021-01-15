@@ -95,8 +95,8 @@ class Game(object):
             verboseprint("card selected for player: ", selected_card)
             lie_card = 1 if selected_card == -1 else -1
 
-            # player decision based on existing suspicion
-            if self.player.alpha * (t.outcome - t.expectation()) > self.player.baseline + self.player.pre_suspicion:
+            #todo: equation for when player is going to lie themselves
+            if abs(self.player.alpha * (t.outcome - t.expectation())) > self.player.baseline + self.player.pre_suspicion:
                 player_selection = lie_card
                 print("player lies: ", player_selection)
             else:
@@ -118,7 +118,7 @@ class Game(object):
             self.player_suspicion.append(new_suspicion)
             self.player.update_suspicion(new_suspicion)
             self.player_log.append(
-                [index, t.n_red, t.n_blue, t.outcome, t.expectation(), selected_card, player_selection, new_suspicion])
+                [index, self.player.alpha, self.player.baseline, t.n_red, t.n_blue, t.outcome, t.expectation(), selected_card, player_selection, new_suspicion])
             verboseprint("new player suspicion: ", new_suspicion, "\n")
 
     def play(self):
