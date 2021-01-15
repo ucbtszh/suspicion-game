@@ -144,7 +144,7 @@ class Game(object):
             else:
                 print("it's a tie \n")
 
-            q_suspect = input("On a scale from 0-10, how confident are you in that your opponent played honestly? (0 = not at all, 10 = completely" )
+            q_suspect = input("On a scale from 0-10, how confident are you in that your opponent played honestly? (0 = not at all, 10 = completely)" )
 
             self.player_log.append(
                 [index, t.n_red, t.n_blue, t.outcome, t.expectation(), selected_card, player_selection, response_time,
