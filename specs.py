@@ -135,9 +135,6 @@ class Game(object):
             response_time = time() - starttime
 
             print("You selected red") if player_selection == "red" else print("You selected blue")
-            self.player_log.append(
-                [index, t.n_red, t.n_blue, t.outcome, t.expectation(), selected_card, player_selection, response_time])
-
             print("Your opponent selected: red card") if t.outcome == -1 else print("Your opponent selected: blue card")
 
             if player_selection == "blue" and t.outcome == -1:
@@ -146,10 +143,16 @@ class Game(object):
                 print("player loses \n")
             else:
                 print("it's a tie \n")
+
+            q_suspect = input("On a scale from 0-10, how confident are you in that your opponent played honestly? (0 = not at all, 10 = completely" )
+
+            self.player_log.append(
+                [index, t.n_red, t.n_blue, t.outcome, t.expectation(), selected_card, player_selection, response_time,
+                 q_suspect])
             print("="*100)
         print("You have reached the end of the game.")
 
-        save_input = input("Would you like to save your data? (y/n)")
+        save_input = input("Would you like to save your results? (y/n)")
         if save_input == "y":
             filename = input("Save as: ") + ".csv"
             with open(filename, "w") as f:
