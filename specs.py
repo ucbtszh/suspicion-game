@@ -5,25 +5,23 @@ from time import time
 random.seed(42)
 
 def suspicion(pre_suspicion, alpha, baseline, outcome, expectation) -> float:
-    """
-    Returns suspicion level according to hypothesized computational behaviour model.
-    """
+    """ Returns suspicion level according to hypothesized computational behaviour model. """
     return pre_suspicion + alpha * (outcome - expectation) + baseline
 
 class Trial(object):
-    """
-    One game play trial is defined by the proportion of red/blue cards over the total number of cards and the opponent's shown outcome.
-    """
+    """ One game play trial is defined by the proportion of red/blue cards
+    over the total number of cards and the opponent's shown outcome. """
 
     n_cards = 5
 
     def __init__(self, trial_params, **kwargs):
         # minimum requirement for a trial are number of red cards and opponent outcome, expected as trial_params
+        if trial_params[0] > self.n_cards:
+            raise ValueError(f'Number of red cards cannot exceed total number of playing cards: {self.n_cards}')
         self.n_red = trial_params[0]
         self.outcome = trial_params[1]
         self.n_blue = self.n_cards - self.n_red
 
-        # add any further specified parameters
         for key, value in kwargs:
             self.key = value
 
@@ -45,9 +43,8 @@ class Trial(object):
 
 
 class Player(object):
-    """
-    Player (participant) attributes and possible actions (lie or not lie) based on suspicion model and game rules.
-    """
+    """ Player (participant) attributes and possible actions (lie or not lie)
+     based on suspicion model and game rules. """
 
     def __init__(self, player_params, pre_suspicion=None, **kwargs):
         # todo: estimate alpha and baseline from actual playing behaviour - add equations
@@ -62,9 +59,7 @@ class Player(object):
 
 
 class Game(object):
-    """
-    Lets Player interact with given Trial(s) according to acquired suspicion level.
-    """
+    """ Lets Player interact with given Trial(s) according to acquired suspicion level. """
 
     def __init__(self, trials, player=None, n_trials=None, randomize=False):
         self.trials = trials  # expected to be of class Trial
@@ -146,9 +141,9 @@ class Game(object):
 
             q_suspect = input("On a scale from 0-10, how confident are you in that your opponent played honestly? (0 = not at all, 10 = completely)" )
 
-            self.player_log.append(
-                [index, t.n_red, t.n_blue, t.outcome, t.expectation(), selected_card, player_selection, response_time,
-                 q_suspect])
+            self.player_log.\
+                append([index, t.n_red, t.n_blue, t.outcome, t.expectation(), selected_card, player_selection,
+                        response_time, q_suspect])
             print("="*100)
         print("You have reached the end of the game.")
 
