@@ -2,6 +2,8 @@ import random
 import csv
 import numpy as np
 
+from analysis import *
+
 from time import time
 from datetime import datetime
 
@@ -41,12 +43,6 @@ def softmax(beta, value, values):
     return np.exp(beta * value) / sum(np.exp(beta * values))
 
 
-# def rate_honesty(self, probability):
-#     '''generate honesty rating according to softmax probability'''
-#     action = probability * xxx
-#     return action
-
-
 class Trial(object):
     """
     Defines a single trial by the proportion of red/blue cards over the total number of cards.
@@ -60,8 +56,9 @@ class Trial(object):
             raise ValueError("Number of red cards cannot exceed total number of cards (5)")
         self.n_red = n_red  # minimally required setting for a trial
         self.n_blue = self.n_cards - self.n_red
-        self.outcome = outcome if outcome is not None else random.choice([-1, 1]) # todo: round probability of opponent's report colour to nearest integer
+        self.outcome = outcome if outcome is not None else random.choice([-1, 1])
         self.exp_violation = self.outcome - self.expectation()
+        self.unsigned_expectation = 1 - self.unsigned_expectation()
 
         # add any further specified parameters
         for key, value in kwargs:
@@ -71,6 +68,14 @@ class Trial(object):
         self.cards = []
         self.cards.extend([-1] * self.n_red)
         self.cards.extend([1] * self.n_blue)
+
+    def unsigned_expectation(self) -> float:
+        if self.outcome == -1:
+            return self.n_red / self.n_cards
+        if self.outcome == 1:
+            return self.n_blue / self.n_cards
+        else:
+            raise ValueError("Opponent outcome has unacceptable value.")
 
     def expectation(self) -> float:
         if self.outcome == -1:
@@ -89,12 +94,12 @@ class Player(object):
     Player (participant) attributes and possible actions (lie or not lie) based on suspicion model and game rules.
     """
 
-    def __init__(self, alpha, beta, bias=None, pre_suspicion=0, **kwargs):
+    def __init__(self, alpha, pre_suspicion=0, beta=None, bias=None, **kwargs):
         # todo: estimate alpha and bias from actual playing behaviour - add equations
         self.alpha = alpha
-        self.beta = beta
-        self.bias = bias if bias is not None else 0
         self.pre_suspicion = pre_suspicion
+        self.beta = beta if beta is not None else 1
+        self.bias = bias if bias is not None else 0
 
         # add any further specified parameters
         for key, value in kwargs:
@@ -112,11 +117,12 @@ class Game(object):
     Lets Player interact with given Trial(s) according to acquired suspicion level.
     """
 
-    def __init__(self, trials, player=None, n_trials=None, randomize=False):
-        self.trials = trials  # expected to be of class Trial
+    def __init__(self, trials, player=None, n_sessions=1, randomize=False):
+        self.trials = trials * n_sessions  # expected to be of class Trial
         self.player = player  # expected to be of class Player
-        self.n_trials = n_trials if n_trials is not None \
-            else len(trials)  # todo: update self.trials if n_trials < or > len(trials)
+        self.player.s0 = self.player.pre_suspicion  # prior suspicion value for first trial
+        self.n_sessions = n_sessions
+        self.n_trials = len(trials)
 
         if randomize:
             random.shuffle(trials)
@@ -133,13 +139,28 @@ class Game(object):
         tmp = np.array(self.suspicion_values)
         return tmp[state_idx]
 
-    def simulate(self, verbose=True, save=False):
+    def normalized_suspicion_values(self):
+        return normalized_array(self.suspicion_values, self.player.s0)
+
+    @staticmethod
+    def suspicion_to_honesty_rating(value):
+        ''' Generate random suspicion ratings in the range [0;1] '''
+        normalied_ratings = [0.0, 0.16666666666666663, 0.33333333333333337, 0.5, 0.6666666666666667, 0.8333333333333334,
+                             1.0]
+        return min(normalied_ratings, key=lambda x: abs(x - value))
+
+    def simulate(self, verbose=True, save=False, add_noise=False):
         """ Generate simulated gameplay data with given trials and player settings."""
         if verbose:
             def verboseprint(*args):
                 print(*args)
         else:
             verboseprint = lambda *a: None
+
+        if add_noise:
+            noise = 0.01 * random.uniform(-1, 1)
+        else:
+            noise = 0
 
         print("starting game play simulation")
         print("player attributes: bias: ", self.player.bias, "alpha: ", self.player.alpha, "beta:", self.player.beta)
@@ -153,16 +174,18 @@ class Game(object):
             selected_card = t.selected_card()
             verboseprint("randomly picked card for player: ", selected_card)
 
-            # todo: for now, let player randomly "lie" or not - determine based on value-suspicion function
+            # todo: let player randomly "lie" or not - determine based on value from suspicion function in different model?
             # player_selection = random.choice([1, -1])
             verboseprint("opponent card: red") if t.outcome == -1 else verboseprint("opponent card: blue")
 
-            t.player_reward = reward(t.outcome, selected_card) # todo: assumes player always reports honestly, i.e. the randomly selected_card; change probabilistically?
+            # trial outcome
+            # todo: assumes player always reports honestly, i.e. the randomly selected_card; change probabilistically?
+            t.player_reward = reward(t.outcome, selected_card)
             t.opponent_reward = reward(selected_card, t.outcome)
 
-            # player suspicion according to suspicion formula, resembles Q update function in Rescorla-Wagner learning
+            # player suspicion according to suspicion formula, resembles Q update rule in Rescorla-Wagner learning
             old_suspicion = self.player.pre_suspicion
-            new_suspicion = old_suspicion + self.player.alpha * t.exp_violation
+            new_suspicion = old_suspicion + self.player.alpha * t.exp_violation + noise
             delta_suspicion = abs(new_suspicion - old_suspicion)
             self.suspicion_values.append(new_suspicion)
             self.player.update_suspicion(new_suspicion)
@@ -174,29 +197,30 @@ class Game(object):
             self.softmax_probabilities.append(probability)
             verboseprint("probability of suspicion rating: ", probability)
 
+            # interpolate suspicion to nearest discrete normalized honesty rating value
+            honesty_rating = self.suspicion_to_honesty_rating(new_suspicion)
+
             # log game
             self.sim_log.append({"index": index,
                                  "n_red": t.n_red,
                                  "n_blue": t.n_blue,
                                  "opponent_card": t.outcome,
                                  "expectation": t.expectation(),
+                                 "unsigned_expectation": t.unsigned_expectation(),
                                  "exp_violation": t.exp_violation,
-                                 "learning_rate": self.player.alpha,
-                                 "beta_noise": self.player.beta,
-                                 "bias": self.player.bias,
                                  "suspicion_tmin1": old_suspicion,
                                  "suspicion_t": new_suspicion,
                                  "delta_suspicion": delta_suspicion,
                                  "random_pick": selected_card,
-                                 "played_card": selected_card, # todo: change to player_selection if allowing lies
+                                 "played_card": selected_card,  # todo: change to player_selection if allowing lies
                                  "player_reward": t.player_reward,
                                  "opponent_reward": t.opponent_reward,
+                                 "honesty_rating": honesty_rating,
                                  "softmax_probability": probability})
         print("end of simulated game")
         if save:
             filename = input("save as: ")
             save_log_as_csv(self.sim_log, filename)
-
 
     def play(self):
         """ Play game using command line interface. """
