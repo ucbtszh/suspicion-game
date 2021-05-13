@@ -2,7 +2,7 @@
 
 import numpy as np
 
-# The tranistion model defines how to move from sigma_current to sigma_new
+# The transition model defines how to move from sigma_current to sigma_new
 transition_model = lambda x: [x[0], np.random.normal(x[1], 0.5, (1,))]
 
 
@@ -24,10 +24,10 @@ def manual_log_like_normal(x, data):
 
 
 # Same as manual_log_like_normal(x,data), but using scipy implementation. It's pretty slow.
-def log_lik_normal(x, data):
-    # x[0]=mu, x[1]=sigma (new or current)
-    # data = the observation
-    return np.sum(np.log(scipy.stats.norm(x[0], x[1]).pdf(data)))
+# def log_lik_normal(x, data):
+#     # x[0]=mu, x[1]=sigma (new or current)
+#     # data = the observation
+#     return np.sum(np.log(scipy.stats.norm(x[0], x[1]).pdf(data)))
 
 
 # Defines whether to accept or reject the new sample
