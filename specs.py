@@ -19,13 +19,13 @@ def delta(x):
 
 def reward(card_opponent, card_player):
     if card_opponent == 1 and card_player == -1:
-        print("You lose 1 point")
+        # print("You lose 1 point")
         return -1
     elif card_opponent == -1 and card_player == 1:
-        print("You win 1 point")
+        # print("You win 1 point")
         return 1
     elif card_opponent == card_player:
-        print("It's a tie: nobody wins or loses a point")
+        # print("It's a tie: nobody wins or loses a point")
         return 0
 
 
@@ -58,7 +58,7 @@ class Trial(object):
         self.n_blue = self.n_cards - self.n_red
         self.outcome = outcome if outcome is not None else random.choice([-1, 1])
         self.exp_violation = self.outcome - self.expectation()
-        self.unsigned_expectation = 1 - self.unsigned_expectation()
+        self.unsigned_exp_violation = 1 - self.unsigned_expectation()
 
         # add any further specified parameters
         for key, value in kwargs:
@@ -69,19 +69,19 @@ class Trial(object):
         self.cards.extend([-1] * self.n_red)
         self.cards.extend([1] * self.n_blue)
 
-    def unsigned_expectation(self) -> float:
-        if self.outcome == -1:
-            return self.n_red / self.n_cards
-        if self.outcome == 1:
-            return self.n_blue / self.n_cards
-        else:
-            raise ValueError("Opponent outcome has unacceptable value.")
-
     def expectation(self) -> float:
         if self.outcome == -1:
             return self.outcome * self.n_red / self.n_cards
         if self.outcome == 1:
             return self.outcome * self.n_blue / self.n_cards
+        else:
+            raise ValueError("Opponent outcome has unacceptable value.")
+
+    def unsigned_expectation(self) -> float:
+        if self.outcome == -1:
+            return self.n_red / self.n_cards
+        if self.outcome == 1:
+            return self.n_blue / self.n_cards
         else:
             raise ValueError("Opponent outcome has unacceptable value.")
 
@@ -118,38 +118,43 @@ class Game(object):
     """
 
     def __init__(self, trials, player=None, n_sessions=1, randomize=False):
+        if randomize:
+            random.shuffle(trials)
         self.trials = trials * n_sessions  # expected to be of class Trial
         self.player = player  # expected to be of class Player
         self.player.s0 = self.player.pre_suspicion  # prior suspicion value for first trial
         self.n_sessions = n_sessions
         self.n_trials = len(trials)
-
-        if randomize:
-            random.shuffle(trials)
-
         self.sim_log = []
         self.live_log = []
         self.trial_redcards = []
         self.suspicion_values = []
+        self.unsigned_expectation_violation = []
         self.softmax_probabilities = []
 
     def trial_state_values(self, n_red):
         state_idx = [i for i, x in enumerate(self.trial_redcards) if x == n_red]
-        print("number of trials with given n_red:", len(state_idx))
+        # print("number of trials with given n_red:", len(state_idx))
         tmp = np.array(self.suspicion_values)
         return tmp[state_idx]
 
-    def normalized_suspicion_values(self):
-        return normalized_array(self.suspicion_values, self.player.s0)
-
-    @staticmethod
-    def suspicion_to_honesty_rating(value):
+    def suspicion_to_honesty_rating(self):
         ''' Generate random suspicion ratings in the range [0;1] '''
-        normalied_ratings = [0.0, 0.16666666666666663, 0.33333333333333337, 0.5, 0.6666666666666667, 0.8333333333333334,
-                             1.0]
-        return min(normalied_ratings, key=lambda x: abs(x - value))
+        normalized_ratings = [0.0, 0.16666666666666663, 0.33333333333333337, 0.5, 0.6666666666666667,
+                              0.8333333333333334,
+                              1.0]
+        normalized_data = normalized_array(self.suspicion_values, self.player.s0)
+        return np.array([min(normalized_ratings, key=lambda x: abs(x - sv)) for sv in normalized_data])
 
-    def simulate(self, verbose=True, save=False, add_noise=False):
+    def unsigned_suspicion_to_honesty_rating(self):
+        ''' Generate random suspicion ratings in the range [0;1] '''
+        normalized_ratings = [0.0, 0.16666666666666663, 0.33333333333333337, 0.5, 0.6666666666666667,
+                              0.8333333333333334,
+                              1.0]
+        normalized_data = normalized_array(self.unsigned_expectation_violation, self.player.s0)
+        return np.array([min(normalized_ratings, key=lambda x: abs(x - sv)) for sv in normalized_data])
+
+    def simulate_signed(self, verbose=True, save=False, add_noise=False, set_noise=0.01):
         """ Generate simulated gameplay data with given trials and player settings."""
         if verbose:
             def verboseprint(*args):
@@ -158,12 +163,12 @@ class Game(object):
             verboseprint = lambda *a: None
 
         if add_noise:
-            noise = 0.01 * random.uniform(-1, 1)
+            noise = set_noise * random.uniform(-1, 1)
         else:
             noise = 0
 
         print("starting game play simulation")
-        print("player attributes: bias: ", self.player.bias, "alpha: ", self.player.alpha, "beta:", self.player.beta)
+        print("player attributes:", "prior: ", self.player.s0, "alpha: ", self.player.alpha)
 
         for index, t in enumerate(self.trials, start=1):
             print("trial: ", index)
@@ -197,16 +202,12 @@ class Game(object):
             self.softmax_probabilities.append(probability)
             verboseprint("probability of suspicion rating: ", probability)
 
-            # interpolate suspicion to nearest discrete normalized honesty rating value
-            honesty_rating = self.suspicion_to_honesty_rating(new_suspicion)
-
             # log game
             self.sim_log.append({"index": index,
                                  "n_red": t.n_red,
                                  "n_blue": t.n_blue,
                                  "opponent_card": t.outcome,
                                  "expectation": t.expectation(),
-                                 "unsigned_expectation": t.unsigned_expectation(),
                                  "exp_violation": t.exp_violation,
                                  "suspicion_tmin1": old_suspicion,
                                  "suspicion_t": new_suspicion,
@@ -215,8 +216,67 @@ class Game(object):
                                  "played_card": selected_card,  # todo: change to player_selection if allowing lies
                                  "player_reward": t.player_reward,
                                  "opponent_reward": t.opponent_reward,
-                                 "honesty_rating": honesty_rating,
                                  "softmax_probability": probability})
+        print("end of simulated game")
+        if save:
+            filename = input("save as: ")
+            save_log_as_csv(self.sim_log, filename)
+
+    def simulate_unsigned(self, verbose=True, save=False, add_noise=False, set_noise=0.01):
+        """ Generate simulated gameplay data with given trials and player settings."""
+        if verbose:
+            def verboseprint(*args):
+                print(*args)
+        else:
+            verboseprint = lambda *a: None
+
+        if add_noise:
+            noise = set_noise * random.uniform(-1, 1)
+        else:
+            noise = 0
+
+        print("starting game play simulation")
+        print("player attributes:", "prior: ", self.player.s0, "alpha: ", self.player.alpha)
+
+        for index, t in enumerate(self.trials, start=1):
+            print("trial: ", index)
+            verboseprint("suspicion_t:", self.player.pre_suspicion)
+            verboseprint("# red cards: ", t.n_red)
+            self.trial_redcards.append(t.n_red)
+
+            selected_card = t.selected_card()
+            verboseprint("randomly picked card for player: ", selected_card)
+
+            # todo: let player randomly "lie" or not - determine based on value from suspicion function in different model?
+            # player_selection = random.choice([1, -1])
+            verboseprint("opponent card: red") if t.outcome == -1 else verboseprint("opponent card: blue")
+
+            # trial outcome
+            # todo: assumes player always reports honestly, i.e. the randomly selected_card; change probabilistically?
+            t.player_reward = reward(t.outcome, selected_card)
+            t.opponent_reward = reward(selected_card, t.outcome)
+
+            # player suspicion according to suspicion formula, resembles Q update rule in Rescorla-Wagner learning
+            old_suspicion = self.player.pre_suspicion
+            new_suspicion = self.player.s0 + t.unsigned_exp_violation * self.player.alpha + noise
+            self.unsigned_expectation_violation.append(new_suspicion)
+            delta_suspicion = abs(new_suspicion - old_suspicion)
+            verboseprint("change in suspicion: ", delta_suspicion)
+            verboseprint("new player suspicion: ", new_suspicion, "\n")
+
+            # log game
+            self.sim_log.append({"index": index,
+                                 "n_red": t.n_red,
+                                 "n_blue": t.n_blue,
+                                 "opponent_card": t.outcome,
+                                 "expectation": t.expectation(),
+                                 "unsigned_exp_violation": t.unsigned_exp_violation,
+                                 "suspicion_tmin1": old_suspicion,
+                                 "suspicion_t": new_suspicion,
+                                 "delta_suspicion": delta_suspicion,
+                                 "random_pick": selected_card,
+                                 "player_reward": t.player_reward,
+                                 "opponent_reward": t.opponent_reward})
         print("end of simulated game")
         if save:
             filename = input("save as: ")
