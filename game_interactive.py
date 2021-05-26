@@ -19,5 +19,5 @@ for n in n_red:
     trials.append(Trial(n))
 
 # create and play game
-game = Game(trials, player=None, n_trials=None, randomize=random_trials)
+game = Game(trials, player=None, n_sessions=None, randomize=random_trials)
 game.play()
