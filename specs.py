@@ -2,7 +2,7 @@ import random
 import csv
 import numpy as np
 
-from analysis import *
+from analysis import normalized_array
 
 from time import time
 from datetime import datetime
@@ -151,8 +151,11 @@ class Game(object):
         normalized_ratings = [0.0, 0.16666666666666663, 0.33333333333333337, 0.5, 0.6666666666666667,
                               0.8333333333333334,
                               1.0]
-        normalized_data = normalized_array(self.unsigned_expectation_violation, self.player.s0)
-        return np.array([min(normalized_ratings, key=lambda x: abs(x - sv)) for sv in normalized_data])
+        return np.array(
+            [min(normalized_ratings, key=lambda x: abs(x - sv)) for sv in self.unsigned_expectation_violation])
+
+    def normalize_signed_suspicion(self):
+        return normalized_array(self.suspicion_values, self.player.s0)
 
     def simulate_signed(self, verbose=True, save=False, add_noise=False, set_noise=0.01):
         """ Generate simulated gameplay data with given trials and player settings."""
@@ -167,8 +170,8 @@ class Game(object):
         else:
             noise = 0
 
-        print("starting game play simulation")
-        print("player attributes:", "prior: ", self.player.s0, "alpha: ", self.player.alpha)
+        print("starting game play simulation with signed suspicion")
+        print("player attributes:", "prior:", self.player.s0, "alpha:", self.player.alpha)
 
         for index, t in enumerate(self.trials, start=1):
             print("trial: ", index)
@@ -203,20 +206,21 @@ class Game(object):
             verboseprint("probability of suspicion rating: ", probability)
 
             # log game
-            self.sim_log.append({"index": index,
+            self.sim_log.append({"trial": index,
                                  "n_red": t.n_red,
                                  "n_blue": t.n_blue,
-                                 "opponent_card": t.outcome,
-                                 "expectation": t.expectation(),
-                                 "exp_violation": t.exp_violation,
+                                 "partner_card_colour": t.outcome,
+                                 "partner_card_colour_expectation": t.expectation(),
+                                 "expectation_violation": t.exp_violation,
                                  "suspicion_tmin1": old_suspicion,
                                  "suspicion_t": new_suspicion,
-                                 "delta_suspicion": delta_suspicion,
-                                 "random_pick": selected_card,
-                                 "played_card": selected_card,  # todo: change to player_selection if allowing lies
-                                 "player_reward": t.player_reward,
-                                 "opponent_reward": t.opponent_reward,
-                                 "softmax_probability": probability})
+                                 "absolute_suspicion_change": delta_suspicion,
+                                 # "random_pick": selected_card,
+                                 # "played_card": selected_card,  # todo: change to player_selection if allowing lies
+                                 # "player_reward": t.player_reward,
+                                 # "opponent_reward": t.opponent_reward,
+                                 # "softmax_probability": probability
+                                 })
         print("end of simulated game")
         if save:
             filename = input("save as: ")
@@ -235,8 +239,8 @@ class Game(object):
         else:
             noise = 0
 
-        print("starting game play simulation")
-        print("player attributes:", "prior: ", self.player.s0, "alpha: ", self.player.alpha)
+        print("starting game play simulation with unsigned suspicion")
+        print("player attributes:", "prior:", self.player.s0, "alpha:", self.player.alpha)
 
         for index, t in enumerate(self.trials, start=1):
             print("trial: ", index)
@@ -265,7 +269,7 @@ class Game(object):
             verboseprint("new player suspicion: ", new_suspicion, "\n")
 
             # log game
-            self.sim_log.append({"index": index,
+            self.sim_log.append({"trial": index,
                                  "n_red": t.n_red,
                                  "n_blue": t.n_blue,
                                  "opponent_card": t.outcome,
@@ -336,3 +340,5 @@ class Game(object):
         if save_input == "y":
             filename = input("Save as: ")
             save_log_as_csv(self.live_log, filename)
+
+
