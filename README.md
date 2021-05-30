@@ -4,6 +4,5 @@ A simple experimental game task built using Python 3. Intended to measure partic
 `python .\game_interactive.py`
 
 ## To do's
-- How to estimate alpha and baseline player attributes from playing behaviour
-- Adjust logic to player card selection (lie or not lie)
+- Implement non-linear solver for parameter estimation
 - Add descriptive stats and visualizations thereof
