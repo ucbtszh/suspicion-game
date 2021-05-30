@@ -1,5 +1,7 @@
 import numpy as np
 
+from specs import Game, Player
+
 
 class GameResponses(object):
     ''' Data structure to write and read cards game task responses from Firestore '''
@@ -86,3 +88,105 @@ def compute_rsquared(actual_data, predicted_data):
     ss_res = np.sum((actual_data - predicted_data) ** 2)
     ss_tot = np.sum((actual_data - actual_data.mean()) ** 2)
     return 1 - np.divide(ss_res, ss_tot)
+
+
+def fit_gridsearch_unsigned(data, trials, params):
+    data = np.array(data)
+    SStot_sv = []
+    SSres_sv = []
+    best_param_sv = []
+    best_param_sv_SSE = []
+    best_param_sv_R2 = []
+
+    for i, param in enumerate(params):
+        g = Game(trials, Player(alpha=param[0], pre_suspicion=param[1]))
+        g.simulate_unsigned(verbose=False, save=False, add_noise=False)
+
+        sv = np.array(g.suspicion_values)
+        residuals_sv = np.sum((data - sv) ** 2)
+        SSres_sv.append(residuals_sv)
+        totals_sv = np.sum(np.array(data - data.mean()) ** 2)
+        SStot_sv.append(totals_sv)
+
+    R2_sv = 1 - np.array(SSres_sv) / np.array(SStot_sv)
+    best_idx_sv = np.array(SSres_sv).argmin()
+    best_param_sv.append(params[best_idx_sv])
+    best_param_sv_SSE.append(np.array(SSres_sv).min())
+    best_param_sv_R2.append(R2_sv[best_idx_sv])
+
+
+def fit_gridsearch_signed(data, trials, params):
+    data = np.array(data)
+    SStot_sv = []
+    SSres_sv = []
+    best_param_sv = []
+    best_param_sv_SSE = []
+    best_param_sv_R2 = []
+
+    for i, param in enumerate(params):
+        g = Game(trials, Player(alpha=param[0], pre_suspicion=param[1]))
+        g.simulate_signed(verbose=False, save=False, add_noise=False)
+
+        sv = np.array(g.suspicion_values)
+        residuals_sv = np.sum((data - sv) ** 2)
+        SSres_sv.append(residuals_sv)
+        totals_sv = np.sum(np.array(data - data.mean()) ** 2)
+        SStot_sv.append(totals_sv)
+
+    R2_sv = 1 - np.array(SSres_sv) / np.array(SStot_sv)
+    best_idx_sv = np.array(SSres_sv).argmin()
+    best_param_sv.append(params[best_idx_sv])
+    best_param_sv_SSE.append(np.array(SSres_sv).min())
+    best_param_sv_R2.append(R2_sv[best_idx_sv])
+
+
+def fit_gridsearch_softmax(data, trials, params):
+    data = np.array(data)
+    SStot_sv = []
+    SSres_sv = []
+    best_param_sv = []
+    best_param_sv_SSE = []
+    best_param_sv_R2 = []
+
+    for i, param in enumerate(params):
+        g = Game(trials, Player(alpha=param[0], pre_suspicion=param[1]))
+        g.simulate_signed(verbose=False, save=False, add_noise=False)
+
+        sv = np.array(g.softmax_probabilities)
+        residuals_sv = np.sum((data - sv) ** 2)
+        SSres_sv.append(residuals_sv)
+        totals_sv = np.sum(np.array(data - data.mean()) ** 2)
+        SStot_sv.append(totals_sv)
+
+    R2_sv = 1 - np.divide(SSres_sv, SStot_sv)
+    best_idx_sv = np.array(SSres_sv).argmin()
+    best_param_sv.append(params[best_idx_sv])
+    best_param_sv_SSE.append(np.array(SSres_sv).min())
+    best_param_sv_R2.append(R2_sv[best_idx_sv])
+
+
+def fit_gridsearch_track_n_consec_colours(data, trials, params):
+    data = np.array(data)
+    SStot_sv = []
+    SSres_sv = []
+    best_param_sv = []
+    best_param_sv_SSE = []
+    best_param_sv_R2 = []
+
+    for param in params:
+        g = Game(trials, Player(alpha=param[0], pre_suspicion=param[1]))
+        g.simulate_signed(verbose=False, save=False, add_noise=False)
+
+        sv = np.array(g.softmax_probabilities)
+        residuals_sv = np.sum((data - sv) ** 2)
+        SSres_sv.append(residuals_sv)
+        totals_sv = np.sum(np.array(data - data.mean()) ** 2)
+        SStot_sv.append(totals_sv)
+
+    R2_sv = 1 - np.divide(SSres_sv, SStot_sv)
+    best_idx_sv = np.array(SSres_sv).argmin()
+    best_param_sv.append(params[best_idx_sv])
+    best_param_sv_SSE.append(np.array(SSres_sv).min())
+    best_param_sv_R2.append(R2_sv[best_idx_sv])
+
+
