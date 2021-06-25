@@ -2,8 +2,6 @@ import random
 import csv
 import numpy as np
 
-from analysis import normalized_array
-
 from time import time
 from datetime import datetime
 
@@ -43,13 +41,23 @@ def softmax(beta, value, values):
     return np.exp(beta * value) / sum(np.exp(beta * values))
 
 
+def normalize(x):
+    # todo: adjust denominator value according to which free parameters are being estimated
+    return x / 1.7142857142857144 # NOTE: this is based on game trials order with Player alpha=1 and no other free parameters
+
+
+def normalized_array(array, s0):
+    tmp = [x + abs(min(array)) for x in array]
+    return np.array([normalize(x + s0) for x in tmp])
+
+
 class Trial(object):
     """
     Defines a single trial by the proportion of red/blue cards over the total number of cards.
     Outcome represents the value of the other player's reported card.
     """
 
-    n_cards = 5
+    n_cards = 7
 
     def __init__(self, n_red, outcome=None, **kwargs):
         if n_red > self.n_cards:
@@ -340,5 +348,3 @@ class Game(object):
         if save_input == "y":
             filename = input("Save as: ")
             save_log_as_csv(self.live_log, filename)
-
-

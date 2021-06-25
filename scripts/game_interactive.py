@@ -1,4 +1,4 @@
-from specs import Trial, Game
+from scripts.specs import Trial, Game
 
 # define trial parameters
 n_red = [int(float(n)) for n in input("Specify number of red cards for each consecutive trial, separated by a comma: ").split(',')]
