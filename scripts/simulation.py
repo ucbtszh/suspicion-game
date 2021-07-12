@@ -137,7 +137,6 @@ class Game(object):
         self.live_log = []
         self.trial_redcards = []
         self.suspicion_values = []
-        self.unsigned_expectation_violation = []
         self.softmax_probabilities = []
 
     def trial_state_values(self, n_red):
@@ -147,20 +146,12 @@ class Game(object):
         return tmp[state_idx]
 
     def suspicion_to_honesty_rating(self):
-        ''' Generate random suspicion ratings in the range [0;1] '''
+        """ Generate random suspicion ratings in the range [0;1] """
         normalized_ratings = [0.0, 0.16666666666666663, 0.33333333333333337, 0.5, 0.6666666666666667,
                               0.8333333333333334,
                               1.0]
         normalized_data = normalized_array(self.suspicion_values, self.player.s0)
         return np.array([min(normalized_ratings, key=lambda x: abs(x - sv)) for sv in normalized_data])
-
-    def unsigned_suspicion_to_honesty_rating(self):
-        ''' Generate random suspicion ratings in the range [0;1] '''
-        normalized_ratings = [0.0, 0.16666666666666663, 0.33333333333333337, 0.5, 0.6666666666666667,
-                              0.8333333333333334,
-                              1.0]
-        return np.array(
-            [min(normalized_ratings, key=lambda x: abs(x - sv)) for sv in self.unsigned_expectation_violation])
 
     def normalize_signed_suspicion(self):
         return normalized_array(self.suspicion_values, self.player.s0)
@@ -229,66 +220,6 @@ class Game(object):
                                  # "opponent_reward": t.opponent_reward,
                                  # "softmax_probability": probability
                                  })
-        print("end of simulated game")
-        if save:
-            filename = input("save as: ")
-            save_log_as_csv(self.sim_log, filename)
-
-    def simulate_unsigned(self, verbose=True, save=False, add_noise=False, set_noise=0.01):
-        """ Generate simulated gameplay data with given trials and player settings."""
-        if verbose:
-            def verboseprint(*args):
-                print(*args)
-        else:
-            verboseprint = lambda *a: None
-
-        if add_noise:
-            noise = set_noise * random.uniform(-1, 1)
-        else:
-            noise = 0
-
-        print("starting game play simulation with unsigned suspicion")
-        print("player attributes:", "prior:", self.player.s0, "alpha:", self.player.alpha)
-
-        for index, t in enumerate(self.trials, start=1):
-            print("trial: ", index)
-            verboseprint("suspicion_t:", self.player.pre_suspicion)
-            verboseprint("# red cards: ", t.n_red)
-            self.trial_redcards.append(t.n_red)
-
-            selected_card = t.selected_card()
-            verboseprint("randomly picked card for player: ", selected_card)
-
-            # todo: let player randomly "lie" or not - determine based on value from suspicion function in different model?
-            # player_selection = random.choice([1, -1])
-            verboseprint("opponent card: red") if t.outcome == -1 else verboseprint("opponent card: blue")
-
-            # trial outcome
-            # todo: assumes player always reports honestly, i.e. the randomly selected_card; change probabilistically?
-            t.player_reward = reward(t.outcome, selected_card)
-            t.opponent_reward = reward(selected_card, t.outcome)
-
-            # player suspicion according to suspicion formula, resembles Q update rule in Rescorla-Wagner learning
-            old_suspicion = self.player.pre_suspicion
-            new_suspicion = self.player.s0 + t.unsigned_exp_violation * self.player.alpha + noise
-            self.unsigned_expectation_violation.append(new_suspicion)
-            delta_suspicion = abs(new_suspicion - old_suspicion)
-            verboseprint("change in suspicion: ", delta_suspicion)
-            verboseprint("new player suspicion: ", new_suspicion, "\n")
-
-            # log game
-            self.sim_log.append({"trial": index,
-                                 "n_red": t.n_red,
-                                 "n_blue": t.n_blue,
-                                 "opponent_card": t.outcome,
-                                 "expectation": t.expectation(),
-                                 "unsigned_exp_violation": t.unsigned_exp_violation,
-                                 "suspicion_tmin1": old_suspicion,
-                                 "suspicion_t": new_suspicion,
-                                 "delta_suspicion": delta_suspicion,
-                                 "random_pick": selected_card,
-                                 "player_reward": t.player_reward,
-                                 "opponent_reward": t.opponent_reward})
         print("end of simulated game")
         if save:
             filename = input("save as: ")
