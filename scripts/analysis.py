@@ -1,84 +1,21 @@
 import numpy as np
 import numexpr
 
-from scripts.specs import Game, Player
+from functools import partial
+from skopt import gp_minimize
+from sklearn.metrics import mean_squared_error
 
 
-class GameResponses(object):
-    ''' Data structure to write and read cards game task responses from Firestore '''
-
-    def __init__(self, randomPick, randomPickColour, reportColour, RTreport, honestyRating, RThonesty,
-                 results, catchRating, RTcatch):
-        self.randomPick = randomPick
-        self.randomPickColour = randomPickColour
-        self.reportColour = reportColour
-        self.honestyRating = honestyRating
-        self.catchRating = catchRating
-        self.RThonesty = RThonesty
-        self.RTreport = RTreport
-        self.RTcatch = RTcatch
-        self.results = results
-
-    @staticmethod
-    def from_dict(source):
-        gresponse = GameResponses(source[u'randomPick'], source[u'randomPickColour'], source[u'reportColour'],
-                                  source[u'RTreport'], source[u'honestyRating'], source[u'RThonesty'],
-                                  source[u'results'], source[u'catchRating'], source[u'RTcatch'])
-
-        return gresponse
-
-    def to_dict(self):
-        dest = {
-            u'randomPick': self.randomPick,
-            u'randomPickColour': self.randomPickColour,
-            u'reportColour': self.reportColour,
-            u'RTreport': self.RTreport,
-            u'honestyRating': self.honestyRating,
-            u'RThonesty': self.RThonesty,
-            u'results': self.results,
-            u'catchRating': self.catchRating,
-            u'RTcatch': self.RTcatch
-        }
-
-        return dest
-
-
-class Demographics(object):
-    ''' Data structure to read demographics survey responses from Firestore '''
-
-    def __init__(self, age, catch, edlev, gender, twin):
-        self.age = age
-        self.catch = catch
-        self.edlev = edlev
-        self.gender = gender
-        self.twin = twin
-
-    @staticmethod
-    def from_dict(source):
-        demos = Demographics(source[u'age'], source[u'catch'], source[u'edlev'],
-                             source[u'gender'], source[u'twin'])
-
-        return demos
-
-    def to_dict(self):
-        dest = {
-            u'age': self.age,
-            u'catch': self.catch,
-            u'edlev': self.edlev,
-            u'gender': self.gender,
-            u'twin': self.twin
-        }
-
-        return dest
+def normalize(data):
+    return (data + abs(min(data)))/(abs(min(data)) + abs(max(data)))
 
 
 def reverse_honesty_rating(array):
-    return numexpr.evaluate(f'(7 - array)')
+    return numexpr.evaluate(f'(6 - array)')
 
 
-def process_trials(trials_json_file):
-    #todo
-    return
+def normalize_7point_ratings(data):
+    return numexpr.evaluate('(1 - data)')
 
 
 def compute_rsquared(actual_data, predicted_data):
@@ -90,104 +27,81 @@ def compute_rsquared(actual_data, predicted_data):
     return 1 - np.divide(ss_res, ss_tot)
 
 
-def fit_signed_suspicion(trials, data, params):
-    data = np.array(data)
-    ss_tot = np.sum((data - data.mean())**2)
-    ss_res = []
-    for param in params:
-        print(param)
-        alpha = param[0]
-        prior = param[1]
-        estimated = []
-        for i in range(len(trials)):
-            print(i)
-            if i==0:
-                estimated.append(trials.normalized_signed_exp_violation.values[i] * alpha + prior)
-#                 print(estimated)
-            else:
-                estimated.append(trials.normalized_signed_exp_violation.values[i] * alpha)
-#                 print(estimated)
-        ss_res.append(np.sum((data - estimated)**2))
-    r2 = 1 - np.divide(ss_res, ss_tot)
-    best_idx = np.array(r2).argmax()
-    best_params = params[best_idx]
-    return best_params, r2
+def calculate_aic(n, mse, num_params):
+    aic = n * np.log(mse) + 2 * num_params
+    return aic
 
 
-def fit_unsigned_suspicion(trials, data, params):
-    data = np.array(data)
-    ss_tot = np.sum((data - data.mean())**2)
-    ss_res = []
-    for param in params:
-        print(param)
-        alpha = param[0]
-        prior = param[1]
-        estimated = []
-        for i in range(len(trials)):
-            print(i)
-            if i==0:
-                estimated.append(abs(trials.exp_violation).values[i] * alpha + prior)
-#                 print(estimated)
-            else:
-                estimated.append(trials.normalized_signed_exp_violation.values[i] * alpha)
-#                 print(estimated)
-        ss_res.append(np.sum((data - estimated)**2))
-    r2 = 1 - np.divide(ss_res, ss_tot)
-    best_idx = np.array(r2).argmax()
-    best_params = params[best_idx]
-    return best_params, r2
+def calculate_bic(n, mse, num_params):
+    bic = n * np.log(mse) + num_params * np.log(n)
+    return bic
 
 
-def bulk_fit_rating_delta_from_signed_exp_violation(trials, data, alpha):
-    # grid search param value fit
-    best_param_SSE = []
-    best_param_R2 = []
+def gridsearch_single_model(responses, params, trials, stat: str):
     best_params = []
-
-    for p, data in enumerate(d_normed_suspicion_ratings):
-        print(p)
-        data = data[1:]
-        SS_tot = np.sum((data - np.mean(data)) ** 2)
-        print(SS_tot)
-        print(len(data))
-        SSres_inter = []
-        R2_inter = []
-        for i, a in enumerate(alpha):
-            print(a)
-            print(data)
-            SS_res = np.sum(np.subtract(data, a * trials.exp_violation.values[1:]) ** 2)
-            SSres_inter.append(SS_res)
-            print(SS_res)
-            R2 = 1 - SS_res / SS_tot
-            R2_inter.append(R2)
-            print(R2)
-        best_idx = np.array(SSres_inter).argmin()
-        best_params.append(alpha[best_idx])
-        best_param_SSE.append(np.array(SSres_inter).min())
-        best_param_R2.append(R2_inter[best_idx])
+    best_r2 = []
+    for i, r in enumerate(responses):
+        print('response subject', i)
+        ss_tot = np.sum((r-np.mean(r))**2)
+        print('ss totals', ss_tot)
+        r2 = []
+        for param in params:
+            pred = param[1] + param[0] * trials[stat]
+            ss_res = np.sum((r-pred)**2)
+            r2.append(1 - np.divide(ss_res, ss_tot))
+        r2 = np.array(r2)
+        best_idx = r2.argmax()
+        print('best r2 index', best_idx)
+        best_params.append(params[best_idx])
+        best_r2.append(r2.max())
+    return best_params, best_r2
 
 
-def bulk_fit_rating_delta_from_unsigned_exp_violation(trials, data, alpha):
-    best_param_SSE = []
-    best_param_R2 = []
-    best_params = []
+def objective_single_model(params, response, trials, stat: str):
+    pred = params[0] + params[1] * trials[stat]
+    return np.sum((response-pred)**2)
 
-    for p, data in enumerate(data):
-        print(p)
-        data = data[1:]
-        data = [(d-data.min())/(data.max()-data.min()) for d in data]
-        print(data)
-        SS_tot = np.sum((data-np.mean(data))**2)
-        SSres_inter = []
-        R2_inter = []
-        for i, a in enumerate(alpha):
-            print(a)
-            surprise = abs(trials.exp_violation.values[1:])
-            SS_res = np.sum(np.subtract(data, a*surprise)**2)
-            SSres_inter.append(SS_res)
-            R2 = 1-SS_res/SS_tot
-            R2_inter.append(R2)
-        best_idx = np.array(SSres_inter).argmin()
-        best_params.append(alpha[best_idx])
-        best_param_SSE.append(np.array(SSres_inter).min())
-        best_param_R2.append(R2_inter[best_idx])
+
+def skopt_fit_single_model(responses, trials, param_search_space):
+    for i, response in enumerate(responses):
+        ss_tot = np.sum((response - np.mean(response)) ** 2)
+        gp_result = gp_minimize(
+            partial(objective_single_model, response=response, trials=trials, stat='normed_cs_signed_e_v'),
+            param_search_space, random_state=42)
+        optimal_ss_res = gp_result.fun
+        print("Subject", i)
+        print("Best parameter estimates: prior =", (gp_result.x[0], "alpha =", gp_result.x[1]))
+        print("R2:", 1 - np.divide(optimal_ss_res, ss_tot))
+        pred = gp_result.x[0] + gp_result.x[1] * trials['normed_cs_signed_e_v']
+        mse = mean_squared_error(response, pred)
+        bic = calculate_bic(len(response), mse, len(param_search_space))
+        aic = calculate_aic(len(response), mse, len(param_search_space))
+        print("BIC:", bic)
+        print("AIC:", aic)
+        print("=" * 100)
+
+
+def objective_weighted(params, response, trials):
+    pred = params[0] + params[1] * trials['normed_signed_e_v'] + params[2] * trials['normed_signed_colour_count']
+    ss_res = np.sum((response-pred)**2)
+    return ss_res
+
+
+def skopt_fit_weighted(responses, trials, param_search_space):
+    for i, response in enumerate(responses):
+        ss_tot = np.sum((response - np.mean(response)) ** 2)
+        gp_result = gp_minimize(partial(objective_weighted, response=response, trials=trials), param_search_space,
+                                random_state=42)
+        optimal_ss_res = gp_result.fun
+        print("Subject", i)
+        print("Best parameter estimates: prior =",
+              (gp_result.x[0], "alpha 1 =", gp_result.x[1], "alpha 2 =", gp_result.x[2]))
+        print("R2:", 1 - np.divide(optimal_ss_res, ss_tot))
+        pred = gp_result.x[0] + gp_result.x[1] * trials['normed_signed_e_v'] + gp_result.x[2] * trials[
+            'normed_signed_colour_count']
+        mse = mean_squared_error(response, pred)
+        bic = calculate_bic(len(response), mse, len(param_search_space))
+        aic = calculate_aic(len(response), mse, len(param_search_space))
+        print("BIC:", bic)
+        print("AIC:", aic)
+        print("=" * 100)
