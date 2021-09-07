@@ -62,46 +62,49 @@ def objective_single_model(params, response, trials, stat: str):
     return np.sum((response-pred)**2)
 
 
-def skopt_fit_single_model(responses, trials, param_search_space):
-    for i, response in enumerate(responses):
-        ss_tot = np.sum((response - np.mean(response)) ** 2)
-        gp_result = gp_minimize(
-            partial(objective_single_model, response=response, trials=trials, stat='normed_cs_signed_e_v'),
-            param_search_space, random_state=42)
-        optimal_ss_res = gp_result.fun
-        print("Subject", i)
-        print("Best parameter estimates: prior =", (gp_result.x[0], "alpha =", gp_result.x[1]))
-        print("R2:", 1 - np.divide(optimal_ss_res, ss_tot))
-        pred = gp_result.x[0] + gp_result.x[1] * trials['normed_cs_signed_e_v']
-        mse = mean_squared_error(response, pred)
-        bic = calculate_bic(len(response), mse, len(param_search_space))
-        aic = calculate_aic(len(response), mse, len(param_search_space))
-        print("BIC:", bic)
-        print("AIC:", aic)
-        print("=" * 100)
+def skopt_fit_single_model_single_response(response, trials, param_search_space, stat: str):
+    ss_tot = np.sum((response - np.mean(response)) ** 2)
+    
+    gp_result = gp_minimize(
+        partial(objective_single_model, response=response, trials=trials, stat=stat),
+        param_search_space, random_state=42)
+    optimal_ss_res = gp_result.fun
+    
+    print("Best parameter estimates: prior =", (gp_result.x[0], "alpha =", gp_result.x[1]))
+    print("R2:", 1 - np.divide(optimal_ss_res, ss_tot))
+    
+    pred = gp_result.x[0] + gp_result.x[1] * trials[stat]
+    
+    mse = mean_squared_error(response, pred)
+    bic = calculate_bic(len(response), mse, len(param_search_space))
+    aic = calculate_aic(len(response), mse, len(param_search_space))
+    
+    print("BIC:", bic)
+    print("AIC:", aic)
+    print("=" * 100)
+    
 
-
-def objective_weighted(params, response, trials):
-    pred = params[0] + params[1] * trials['normed_signed_e_v'] + params[2] * trials['normed_signed_colour_count']
+def objective_weighted(params, response, trials, stat1: str, stat2: str):
+    pred = params[0] + params[1] * trials[stat1] + params[2] * trials[stat2]
     ss_res = np.sum((response-pred)**2)
     return ss_res
 
 
-def skopt_fit_weighted(responses, trials, param_search_space):
-    for i, response in enumerate(responses):
-        ss_tot = np.sum((response - np.mean(response)) ** 2)
-        gp_result = gp_minimize(partial(objective_weighted, response=response, trials=trials), param_search_space,
-                                random_state=42)
-        optimal_ss_res = gp_result.fun
-        print("Subject", i)
-        print("Best parameter estimates: prior =",
-              (gp_result.x[0], "alpha 1 =", gp_result.x[1], "alpha 2 =", gp_result.x[2]))
-        print("R2:", 1 - np.divide(optimal_ss_res, ss_tot))
-        pred = gp_result.x[0] + gp_result.x[1] * trials['normed_signed_e_v'] + gp_result.x[2] * trials[
-            'normed_signed_colour_count']
-        mse = mean_squared_error(response, pred)
-        bic = calculate_bic(len(response), mse, len(param_search_space))
-        aic = calculate_aic(len(response), mse, len(param_search_space))
-        print("BIC:", bic)
-        print("AIC:", aic)
-        print("=" * 100)
+def skopt_fit_weighted_model_single_response(response, trials, param_search_space, stat1: str, stat2: str):
+    ss_tot = np.sum((response - np.mean(response)) ** 2)
+    gp_result = gp_minimize(partial(objective_weighted, response=response, trials=trials, stat1=stat1, stat2=stat2),
+                            param_search_space, random_state=42)
+    optimal_ss_res = gp_result.fun
+
+    print("Best parameter estimates: prior =", gp_result.x[0], "alpha 1 =", gp_result.x[1], "alpha 2 =", gp_result.x[2])
+    print("R2:", 1 - np.divide(optimal_ss_res, ss_tot))
+
+    pred = gp_result.x[0] + gp_result.x[1] * trials[stat1] + gp_result.x[2] * trials[stat2]
+
+    mse = mean_squared_error(response, pred)
+    bic = calculate_bic(len(response), mse, len(param_search_space))
+    aic = calculate_aic(len(response), mse, len(param_search_space))
+
+    print("BIC:", bic)
+    print("AIC:", aic)
+    print("=" * 100)
