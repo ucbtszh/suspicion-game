@@ -73,16 +73,14 @@ class Demographics(object):
         return dest
 
 
-def process_trials(trials_json_file: str, n_card_per_trial: int):
-    """ preprocess model values to fit from trials setup data; returns trials DataFrame """
-    with open(trials_json_file, "r") as read_file:
-        trials_source = json.load(read_file)
-    trials = pd.DataFrame(trials_source)
+def process_trials_from_df(df_trials, n_card_per_trial: int):
+    """ preprocess model values to fit from trials setup data; assumes trials to be of type pandas DataFrame """
+    trials = df_trials
 
     trials['trial'] = trials.index + 1
-
     trials['n_blue'] = n_card_per_trial - trials['n_red']
 
+    # within-trials expectation violation as function of reported card colour likelihood
     trials['e_v'] = np.where(trials['outcome'] == -1,
                              trials['outcome'] - trials['outcome'] * (trials['n_red'] / n_card_per_trial), \
                              trials['outcome'] - trials['outcome'] * (
@@ -90,20 +88,16 @@ def process_trials(trials_json_file: str, n_card_per_trial: int):
     trials['normed_signed_e_v'] = normalize(trials['e_v'])
     trials['normed_unsigned_e_v'] = normalize(abs(trials['e_v']))
 
-    normalized_signed_colour_count = normalize(trials.signed_n_consec_colour.values)
-
-    trials['normed_signed_colour_count'] = normalized_signed_colour_count
-    trials['normed_unsigned_colour_count'] = [(v / 5) for v in trials.n_consec_colour]
-
+    # with trial-to-trial update rule, reuslts in cumulcative sum of expectation violations:
     trials['cs_signed_e_v'] = trials['e_v'].cumsum()
     trials['normed_cs_signed_e_v'] = normalize(trials['cs_signed_e_v'])
 
     trials['cs_unsigned_e_v'] = abs(trials['e_v']).cumsum()
     trials['normed_cs_unsigned_e_v'] = normalize(trials['cs_unsigned_e_v'])
 
+    # across-trials 'global' count of consecutive card colour reports
     count_red = abs(trials.outcome[lambda x: x == -1].cumsum())
     count_blue = abs(trials.outcome[lambda x: x == 1].cumsum())
-
     trials['n_reported_colour_opp'] = count_red.append(count_blue).sort_index()
 
     track_freq = [1] * len(trials)
@@ -115,6 +109,60 @@ def process_trials(trials_json_file: str, n_card_per_trial: int):
                 continue
             if (outcome == trials.outcome.values[i - 1]):
                 track_freq[i] = track_freq[i - 1] + 1
+
     trials['n_consec_colour'] = track_freq
+    normalized_signed_colour_count = normalize(trials['n_consec_colour'] * trials['outcome'])
+
+    trials['normed_signed_colour_count'] = normalized_signed_colour_count
+    trials['normed_unsigned_colour_count'] = normalize(trials['n_consec_colour'])
+
+    return trials
+
+
+
+def process_trials_from_file(trials_json_file: str, n_card_per_trial: int):
+    """ preprocess model values to fit from trials setup data; returns trials DataFrame """
+    with open(trials_json_file, "r") as read_file:
+        trials_source = json.load(read_file)
+    trials = pd.DataFrame(trials_source)
+
+    trials['trial'] = trials.index + 1
+    trials['n_blue'] = n_card_per_trial - trials['n_red']
+
+    # within-trials expectation violation as function of reported card colour likelihood
+    trials['e_v'] = np.where(trials['outcome'] == -1,
+                             trials['outcome'] - trials['outcome'] * (trials['n_red'] / n_card_per_trial), \
+                             trials['outcome'] - trials['outcome'] * (
+                                     n_card_per_trial - trials['n_red']) / n_card_per_trial)
+    trials['normed_signed_e_v'] = normalize(trials['e_v'])
+    trials['normed_unsigned_e_v'] = normalize(abs(trials['e_v']))
+
+    # with trial-to-trial update rule, reuslts in cumulcative sum of expectation violations:
+    trials['cs_signed_e_v'] = trials['e_v'].cumsum()
+    trials['normed_cs_signed_e_v'] = normalize(trials['cs_signed_e_v'])
+
+    trials['cs_unsigned_e_v'] = abs(trials['e_v']).cumsum()
+    trials['normed_cs_unsigned_e_v'] = normalize(trials['cs_unsigned_e_v'])
+
+    # across-trials 'global' count of consecutive card colour reports
+    count_red = abs(trials.outcome[lambda x: x == -1].cumsum())
+    count_blue = abs(trials.outcome[lambda x: x == 1].cumsum())
+    trials['n_reported_colour_opp'] = count_red.append(count_blue).sort_index()
+
+    track_freq = [1] * len(trials)
+    for i, outcome in enumerate(trials['outcome'].values):
+        if (i == 0):
+            continue
+        if (i > 0):
+            if (outcome != trials.outcome.values[i - 1]):
+                continue
+            if (outcome == trials.outcome.values[i - 1]):
+                track_freq[i] = track_freq[i - 1] + 1
+
+    trials['n_consec_colour'] = track_freq
+    normalized_signed_colour_count = normalize(trials['n_consec_colour'] * trials['outcome'])
+
+    trials['normed_signed_colour_count'] = normalized_signed_colour_count
+    trials['normed_unsigned_colour_count'] = normalize(trials['n_consec_colour'])
 
     return trials
