@@ -3,7 +3,7 @@ import numexpr
 
 from functools import partial
 from skopt import gp_minimize
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import precision_score, recall_score, accuracy_score, balanced_accuracy_score, mean_squared_error
 
 
 def normalize(data):
@@ -70,8 +70,10 @@ def skopt_fit_single_model_single_response(response, trials, param_search_space,
         param_search_space, random_state=42)
     optimal_ss_res = gp_result.fun
     
+    r2 =  1 - np.divide(optimal_ss_res, ss_tot)
+    
     print("Best parameter estimates: prior =", (gp_result.x[0], "alpha =", gp_result.x[1]))
-    print("R2:", 1 - np.divide(optimal_ss_res, ss_tot))
+    print("R2:", r2)
     
     pred = gp_result.x[0] + gp_result.x[1] * trials[stat]
     
@@ -79,9 +81,13 @@ def skopt_fit_single_model_single_response(response, trials, param_search_space,
     bic = calculate_bic(len(response), mse, len(param_search_space))
     aic = calculate_aic(len(response), mse, len(param_search_space))
     
+    print(len(response), mse, len(param_search_space))
+    
     print("BIC:", bic)
     print("AIC:", aic)
     print("=" * 100)
+    
+    return {"ss_total": ss_tot, "est_prior": gp_result.x[0], "est_alpha": gp_result.x[1], "mean_squared_error": mse, "R2": r2, "BIC": bic, "AIC": aic}
     
 
 def objective_weighted(params, response, trials, stat1: str, stat2: str):
@@ -95,9 +101,11 @@ def skopt_fit_weighted_model_single_response(response, trials, param_search_spac
     gp_result = gp_minimize(partial(objective_weighted, response=response, trials=trials, stat1=stat1, stat2=stat2),
                             param_search_space, random_state=42)
     optimal_ss_res = gp_result.fun
+    
+    r2 = 1 - np.divide(optimal_ss_res, ss_tot)
 
     print("Best parameter estimates: prior =", gp_result.x[0], "alpha 1 =", gp_result.x[1], "alpha 2 =", gp_result.x[2])
-    print("R2:", 1 - np.divide(optimal_ss_res, ss_tot))
+    print("R2:", r2)
 
     pred = gp_result.x[0] + gp_result.x[1] * trials[stat1] + gp_result.x[2] * trials[stat2]
 
@@ -108,3 +116,176 @@ def skopt_fit_weighted_model_single_response(response, trials, param_search_spac
     print("BIC:", bic)
     print("AIC:", aic)
     print("=" * 100)
+    
+    return {"ss_total": ss_tot, "est_prior": gp_result.x[0], "est_alpha": gp_result.x[1], "mean_squared_error": mse, "R2": r2, "BIC": bic, "AIC": aic}
+
+
+def reset_n_blue_per_trial():
+    return {1: {'blue': 0, 'red': 0},
+                    2: {'blue': 0, 'red': 0},
+                    3: {'blue': 0, 'red': 0},
+                    4: {'blue': 0, 'red': 0},
+                    5: {'blue': 0, 'red': 0},
+                    6: {'blue': 0, 'red': 0}}
+
+
+def check_lie_prob_signed(n_cards, n_red, outcome):
+    n_blue_per_trial = reset_n_blue_per_trial()
+
+    p_blue_trial = (n_cards - n_red) / n_cards
+
+    if outcome == 1:
+        n_blue_per_trial[n_red]['blue'] += 1
+    elif outcome == -1:
+        n_blue_per_trial[n_red]['red'] += 1
+    else:
+        raise ValueError("Unknown report colour value input")
+
+    n_trials = n_blue_per_trial[n_red]['blue'] + n_blue_per_trial[n_red]['red']
+    print("n trials with setup", n_trials)
+
+    if n_trials == 1:
+        if outcome == 1:
+            print("p blue in trial", p_blue_trial)
+            return 1 - p_blue_trial
+        else:
+            return 1  # because we assume people only lie rationally, if outcome is -1 (red) it should not raise suspicion (very high likelihood)
+
+    if (n_blue_per_trial[n_red]['blue'] == 0) | (n_blue_per_trial[n_red]['red'] == 0):
+        n_combinations = 1
+    elif (n_blue_per_trial[n_red]['blue'] == 1) | (n_blue_per_trial[n_red]['red'] == 1):
+        n_combinations = (n_trials * (n_trials + 1)) / 2
+    else:
+        n_combinations = ((n_trials - 1) * n_trials) / 2
+
+    n_trials_blue = n_blue_per_trial[n_red]['blue']
+
+    p_red_trial = n_red / n_cards
+
+    if outcome == -1:
+        return 1
+    return (p_blue_trial ** n_trials_blue) * (p_red_trial ** (n_trials - n_trials_blue)) * n_combinations
+
+
+def check_lie_prob_nonc(n_cards, n_red, outcome):
+    n_blue_per_trial = reset_n_blue_per_trial()
+
+    p_blue_trial = (n_cards - n_red) / n_cards
+
+    if outcome == 1:
+        n_blue_per_trial[n_red]['blue'] += 1
+    elif outcome == -1:
+        n_blue_per_trial[n_red]['red'] += 1
+    else:
+        raise ValueError("Unknown report colour value input")
+
+    n_trials = n_blue_per_trial[n_red]['blue'] + n_blue_per_trial[n_red]['red']
+    print("n trials with setup", n_trials)
+
+    if n_trials == 1:
+        if outcome == 1:
+            print("p blue in trial", p_blue_trial)
+            return 1 - p_blue_trial
+        else:
+            return p_blue_trial
+
+    n_trials_blue = n_blue_per_trial[n_red]['blue']
+
+    p_red_trial = n_red / n_cards
+
+    return (p_blue_trial ** n_trials_blue) * (p_red_trial ** (n_trials - n_trials_blue))
+
+
+def check_lie_prob_nonc_signed(n_cards, n_red, outcome):
+    n_blue_per_trial = reset_n_blue_per_trial()
+
+    p_blue_trial = (n_cards - n_red) / n_cards
+
+    if outcome == 1:
+        n_blue_per_trial[n_red]['blue'] += 1
+    elif outcome == -1:
+        n_blue_per_trial[n_red]['red'] += 1
+    else:
+        raise ValueError("Unknown report colour value input")
+
+    n_trials = n_blue_per_trial[n_red]['blue'] + n_blue_per_trial[n_red]['red']
+    print("n trials with setup", n_trials)
+
+    if n_trials == 1:
+        if outcome == 1:
+            print("p blue in trial", p_blue_trial)
+            return 1 - p_blue_trial
+        else:
+            return p_blue_trial
+
+    n_trials_blue = n_blue_per_trial[n_red]['blue']
+
+    p_red_trial = n_red / n_cards
+
+    if outcome == -1:
+        return 1
+    return (p_blue_trial ** n_trials_blue) * (p_red_trial ** (n_trials - n_trials_blue))
+
+
+def check_lie_prob(n_cards, n_red, outcome):
+    n_blue_per_trial = reset_n_blue_per_trial()
+
+    p_blue_trial = (n_cards - n_red) / n_cards
+
+    if outcome == 1:
+        n_blue_per_trial[n_red]['blue'] += 1
+    elif outcome == -1:
+        n_blue_per_trial[n_red]['red'] += 1
+    else:
+        raise ValueError("Unknown report colour value input")
+
+    n_trials = n_blue_per_trial[n_red]['blue'] + n_blue_per_trial[n_red]['red']
+    print("n trials with setup", n_trials)
+
+    if n_trials == 1:
+        if outcome == 1:
+            print("p blue in trial", p_blue_trial)
+            return 1 - p_blue_trial
+        else:
+            return p_blue_trial
+
+    if (n_blue_per_trial[n_red]['blue'] == 0) | (n_blue_per_trial[n_red]['red'] == 0):
+        n_combinations = 1
+    #         print("n combi 1 colour 0 n", n_combinations)
+    elif (n_blue_per_trial[n_red]['blue'] == 1) | (n_blue_per_trial[n_red]['red'] == 1):
+        n_combinations = (n_trials * (n_trials + 1)) / 2
+    #         print("n combi 1 colour 1 n", n_combinations)
+    else:
+        n_combinations = ((n_trials - 1) * n_trials) / 2
+    #         print("n combi cols >1n", n_combinations)
+
+    n_trials_blue = n_blue_per_trial[n_red]['blue']
+
+    p_red_trial = n_red / n_cards
+
+    #     print("N blue trials", n_trials_blue)
+    #     print("p red", p_red_trial)
+    #     print("p red given trials", p_red_trial ** (n_trials - n_trials_blue))
+    #     print("p blue given trials", p_blue_trial ** n_trials_blue)
+    return (p_blue_trial ** n_trials_blue) * (p_red_trial ** (n_trials - n_trials_blue)) * n_combinations
+
+
+def test_lie_thresholds(thresholds, trials, n_cards, gt_lies):
+    precision = []
+    recall = []
+    accuracy = []
+
+    for th in thresholds:
+        lie_detect = []
+        for i, t in enumerate(trials):
+            print("TRIAL", i)
+            p = check_lie_prob(n_cards, t['n_red'], t['outcome'])
+            print("event prob", p)
+            if p < th:
+                lie_detect.append(1)
+            else:
+                lie_detect.append(0)
+        precision.append(precision_score(gt_lies, lie_detect))
+        recall.append(recall_score(gt_lies, lie_detect))
+        accuracy.append(accuracy_score(gt_lies, lie_detect))
+
