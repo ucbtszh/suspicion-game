@@ -9,7 +9,7 @@ class GameResponses(object):
     """ Data structure to write and read cards game task responses from Firestore """
 
     def __init__(self, randomPick, randomPickColour, reportColour, RTreport, honestyRating, RThonesty,
-                 results, catchRating, RTcatch):
+                 results, catchRating, RTcatch, nred, ppLied, otherReport):
         self.randomPick = randomPick
         self.randomPickColour = randomPickColour
         self.reportColour = reportColour
@@ -19,12 +19,16 @@ class GameResponses(object):
         self.RTreport = RTreport
         self.RTcatch = RTcatch
         self.results = results
+        self.nRed = nred
+        self.ppLied = ppLied
+        self.otherReport = otherReport
 
     @staticmethod
     def from_dict(source):
         gresponse = GameResponses(source[u'randomPick'], source[u'randomPickColour'], source[u'reportColour'],
                                   source[u'RTreport'], source[u'honestyRating'], source[u'RThonesty'],
-                                  source[u'results'], source[u'catchRating'], source[u'RTcatch'])
+                                  source[u'results'], source[u'catchRating'], source[u'RTcatch'], source[u'nRed'],
+                                  source[u'ppLied'], source[u'outcome'])
 
         return gresponse
 
@@ -38,7 +42,10 @@ class GameResponses(object):
             u'RThonesty': self.RThonesty,
             u'results': self.results,
             u'catchRating': self.catchRating,
-            u'RTcatch': self.RTcatch
+            u'RTcatch': self.RTcatch,
+            u'nRed': self.nRed,
+            u'ppLied': self.ppLied,
+            u'otherReport': self.otherReport
         }
 
         return dest
@@ -84,7 +91,7 @@ def process_trials_from_df(df_trials, n_card_per_trial: int):
     trials['e_v'] = np.where(trials['outcome'] == -1,
                              trials['outcome'] - trials['outcome'] * (trials['n_red'] / n_card_per_trial), \
                              trials['outcome'] - trials['outcome'] * (
-                                         n_card_per_trial - trials['n_red']) / n_card_per_trial)
+                                     n_card_per_trial - trials['n_red']) / n_card_per_trial)
     trials['normed_signed_e_v'] = normalize(trials['e_v'])
     trials['normed_unsigned_e_v'] = normalize(abs(trials['e_v']))
 
@@ -117,7 +124,6 @@ def process_trials_from_df(df_trials, n_card_per_trial: int):
     trials['normed_unsigned_colour_count'] = normalize(trials['n_consec_colour'])
 
     return trials
-
 
 
 def process_trials_from_file(trials_json_file: str, n_card_per_trial: int):
@@ -166,3 +172,20 @@ def process_trials_from_file(trials_json_file: str, n_card_per_trial: int):
     trials['normed_unsigned_colour_count'] = normalize(trials['n_consec_colour'])
 
     return trials
+
+
+def same_cond_set1_trials(uuid, condition, as31, bs11, bs02):
+    if condition[uuid] == "11":
+        return pd.concat([bs11, as31, bs02]).reset_index()
+    elif condition[uuid] == "12":
+        return pd.concat([bs11, bs02, as31]).reset_index()
+    elif condition[uuid] == "21":
+        return pd.concat([as31, bs11, bs02]).reset_index()
+    elif condition[uuid] == "22":
+        return pd.concat([as31, bs02, bs11]).reset_index()
+    elif condition[uuid] == "31":
+        return pd.concat([bs02, bs11, as31]).reset_index()
+    elif condition[uuid] == "32":
+        return pd.concat([bs02, as31, bs11]).reset_index()
+    else:
+        print('no applicable subject condition found')
