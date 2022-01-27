@@ -80,6 +80,7 @@ class Demographics(object):
         return dest
 
 
+
 def process_trials_from_df(df_trials, n_card_per_trial: int):
     """ preprocess model values to fit from trials setup data; assumes trials to be of type pandas DataFrame """
     trials = df_trials
@@ -95,6 +96,31 @@ def process_trials_from_df(df_trials, n_card_per_trial: int):
     trials['normed_signed_e_v'] = normalize(trials['e_v'])
     trials['normed_unsigned_e_v'] = normalize(abs(trials['e_v']))
 
+    # # across-trials 'global' count of consecutive card colour reports
+    # count_red = abs(trials.outcome[lambda x: x == -1].cumsum())
+    # count_blue = abs(trials.outcome[lambda x: x == 1].cumsum())
+    # trials['n_reported_colour_opp'] = count_red.append(count_blue).sort_index()
+    #
+    # track_freq = [1] * len(trials)
+    # for i, outcome in enumerate(trials['outcome'].values):
+    #     if (i == 0):
+    #         continue
+    #     if (i > 0):
+    #         if (outcome != trials.outcome.values[i - 1]):
+    #             continue
+    #         if (outcome == trials.outcome.values[i - 1]):
+    #             track_freq[i] = track_freq[i - 1] + 1
+    #
+    # trials['n_consec_colour'] = track_freq
+    # normalized_signed_colour_count = normalize(trials['n_consec_colour'] * trials['outcome'])
+    #
+    # trials['normed_signed_colour_count'] = normalized_signed_colour_count
+    # trials['normed_unsigned_colour_count'] = normalize(trials['n_consec_colour'])
+
+    return trials
+
+
+def global_col_count(trials):
     # with trial-to-trial update rule, reuslts in cumulcative sum of expectation violations:
     trials['cs_signed_e_v'] = trials['e_v'].cumsum()
     trials['normed_cs_signed_e_v'] = normalize(trials['cs_signed_e_v'])
@@ -102,7 +128,6 @@ def process_trials_from_df(df_trials, n_card_per_trial: int):
     trials['cs_unsigned_e_v'] = abs(trials['e_v']).cumsum()
     trials['normed_cs_unsigned_e_v'] = normalize(trials['cs_unsigned_e_v'])
 
-    # across-trials 'global' count of consecutive card colour reports
     count_red = abs(trials.outcome[lambda x: x == -1].cumsum())
     count_blue = abs(trials.outcome[lambda x: x == 1].cumsum())
     trials['n_reported_colour_opp'] = count_red.append(count_blue).sort_index()
